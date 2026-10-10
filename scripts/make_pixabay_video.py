@@ -144,12 +144,12 @@ def main():
         # Loop the free clip if necessary, crop to vertical, and add a readable information panel.
         video_filter = (
             "scale=1080:1920:force_original_aspect_ratio=increase,"
-            "crop=1080:1920,setsar=1,fps=24,format=yuv420p"
+            "crop=1080:1920,setsar=1,fps=24"
         )
         run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", str(clip), "-i", str(overlay),
              "-t", f"{seg_duration:.3f}", "-filter_complex",
-             f"[0:v]{video_filter}[bg];[bg][1:v]overlay=0:0:format=auto[v]",
-             "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "veryfast",
+             f"[0:v]{video_filter}[bg];[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v]",
+             "-map", "[v]", "-an", "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast",
              "-crf", "21", "-movflags", "+faststart", str(segment)])
         segments.append(segment)
         # Keep source links and contributors alongside the review artifact.
@@ -162,7 +162,7 @@ def main():
          "-c", "copy", str(silent)])
     final = OUT / "factinated_free_footage_test.mp4"
     run(["ffmpeg", "-y", "-i", str(silent), "-i", str(audio_path), "-t", f"{duration:.3f}",
-         "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest",
+         "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "160k", "-shortest",
          "-movflags", "+faststart", str(final)])
     print(f"Video created: {final}")
     print("This workflow saves a review artifact only. It does not publish to YouTube.")
