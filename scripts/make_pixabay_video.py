@@ -2,6 +2,8 @@
 """Build a review-only Factinated Short using free Pixabay video clips."""
 import json
 import os
+import hashlib
+import time
 import subprocess
 import sys
 import urllib.parse
@@ -12,8 +14,10 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "output"
 ASSETS = OUT / "pixabay_assets"
+CACHE = ROOT / ".pixabay_api_cache"
 OUT.mkdir(exist_ok=True)
 ASSETS.mkdir(exist_ok=True)
+CACHE.mkdir(exist_ok=True)
 W, H = 1080, 1920
 API_KEY = os.environ.get("PIXABAY_API_KEY", "").strip()
 BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -38,12 +42,27 @@ def download(url, path):
     with urllib.request.urlopen(req, timeout=90) as response:
         path.write_bytes(response.read())
 
-def find_clip(query, index):
+def cached_video_search(query):
+    # Pixabay asks API users to cache results for at least 24 hours.
+    cache_file = CACHE / (hashlib.sha256(query.encode("utf-8")).hexdigest() + ".json")
+    if cache_file.exists():
+        try:
+            saved = json.loads(cache_file.read_text(encoding="utf-8"))
+            if time.time() - float(saved["cached_at"]) < 24 * 60 * 60:
+                print(f"Using cached Pixabay search for: {query}")
+                return saved["data"]
+        except (ValueError, KeyError, OSError):
+            pass
     params = urllib.parse.urlencode({
         "key": API_KEY, "q": query, "per_page": 20,
         "safesearch": "true", "video_type": "film", "order": "popular"
     })
     data = request_json("https://pixabay.com/api/videos/?" + params)
+    cache_file.write_text(json.dumps({"cached_at": time.time(), "data": data}), encoding="utf-8")
+    return data
+
+def find_clip(query, index):
+    data = cached_video_search(query)
     hits = data.get("hits", [])
     # Prefer a real video rendition with a usable URL, choosing large then medium.
     for hit in hits:
