@@ -73,12 +73,12 @@ def main():
             for content in item.get("content", []):
                 if content.get("type") == "output_text":
                     text_parts.append(content.get("text", ""))
-    raw = "\\n".join(text_parts).strip()
+    raw = "\n".join(text_parts).strip()
     if not raw:
         raise SystemExit("OpenAI returned no text. Check the model and API account settings.")
     # Be tolerant if the model wraps JSON in a Markdown fence.
     if raw.startswith("```"):
-        raw = raw.split("\\n", 1)[1]
+        raw = raw.split("\n", 1)[1]
         if raw.endswith("```"):
             raw = raw[:-3].strip()
     try:
@@ -121,7 +121,7 @@ def main():
            "## Fact-check notes", ""]
     md += [f"- {note}" for note in plan.get("fact_check_notes", [])]
     md += ["", "---", "This is an AI-generated draft for human review. It has not been turned into a video or published."]
-    (OUT / "factinated_ai_plan.md").write_text("\\n".join(md) + "\\n", encoding="utf-8")
+    (OUT / "factinated_ai_plan.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     print(f"AI plan created for review: {json_path}")
     print(f"Readable report created: {OUT / 'factinated_ai_plan.md'}")
     print("Review-only: no video was generated and nothing was published.")
