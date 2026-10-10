@@ -61,28 +61,38 @@ def cached_video_search(query):
     cache_file.write_text(json.dumps({"cached_at": time.time(), "data": data}), encoding="utf-8")
     return data
 
-def find_clip(query, index):
-    data = cached_video_search(query)
-    hits = data.get("hits", [])
-    # Prefer a real video rendition with a usable URL, choosing large then medium.
-    for hit in hits:
-        renditions = hit.get("videos", {})
-        chosen = next((renditions.get(k) for k in ("large", "medium", "small")
-                       if renditions.get(k, {}).get("url")), None)
-        if not chosen:
-            continue
-        target = ASSETS / f"clip_{index+1}.mp4"
-        try:
-            download(chosen["url"], target)
-            if target.stat().st_size > 100_000:
-                username = hit.get("user", "Pixabay contributor")
-                print(f"Found free clip for scene {index+1}; contributor: {username}.")
-                return target, username, hit.get("pageURL", "https://pixabay.com/videos/")
-        except Exception:
-            if target.exists():
-                target.unlink()
-            continue
-    raise RuntimeError(f"No usable Pixabay video found for search: {query!r}. Try another search term.")
+def find_clip(query, index, used_sources):
+    # Use targeted alternatives when the popular search results repeat a scene.
+    alternatives = {
+        "venus planet": ["venus planet", "venus surface space", "planet venus animation"],
+        "earth moon space": ["earth moon space", "moon orbit earth", "moon surface space"],
+        "galaxy stars space": ["galaxy stars space", "deep space nebula", "milky way stars"]
+    }
+    for search_query in alternatives.get(query, [query]):
+        hits = cached_video_search(search_query).get("hits", [])
+        for hit in hits:
+            source = hit.get("pageURL", "")
+            if source and source in used_sources:
+                continue
+            renditions = hit.get("videos", {})
+            chosen = next((renditions.get(k) for k in ("large", "medium", "small")
+                           if renditions.get(k, {}).get("url")), None)
+            if not chosen:
+                continue
+            target = ASSETS / f"clip_{index+1}.mp4"
+            try:
+                download(chosen["url"], target)
+                if target.stat().st_size > 100_000:
+                    username = hit.get("user", "Pixabay contributor")
+                    source = source or "https://pixabay.com/videos/"
+                    used_sources.add(source)
+                    print(f"Found unique clip for scene {index+1} using {search_query!r}; contributor: {username}.")
+                    return target, username, source
+            except Exception:
+                if target.exists():
+                    target.unlink()
+                continue
+    raise RuntimeError(f"No unique usable Pixabay clip found for scene {index+1}. Stopping rather than repeating footage.")
 
 def wrap(draw, text, font, max_width):
     lines, line = [], ""
@@ -101,23 +111,25 @@ def wrap(draw, text, font, max_width):
 def make_overlay(index, heading, detail, credit):
     image = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
-    # A translucent lower panel keeps text readable while leaving the footage visible.
-    draw.rounded_rectangle((42, 1110, 1038, 1800), radius=38, fill=(2, 8, 24, 205), outline=(95, 210, 255, 180), width=3)
-    small = ImageFont.truetype(BOLD, 26)
-    draw.rounded_rectangle((70, 1150, 385, 1210), radius=25, fill=(14, 44, 76, 235))
-    draw.text((94, 1166), f"FACTINATED  /  0{index+1}", font=small, fill=(145, 225, 255, 255))
-    head_font = ImageFont.truetype(BOLD, 54)
-    y = 1260
-    for line in wrap(draw, heading, head_font, 890):
-        draw.text((76, y), line, font=head_font, fill=(255, 255, 255, 255), stroke_width=1, stroke_fill=(0, 0, 0, 200))
-        y += 68
-    body_font = ImageFont.truetype(REGULAR, 38)
-    y += 18
-    for line in wrap(draw, detail, body_font, 890):
-        draw.text((78, y), line, font=body_font, fill=(225, 236, 250, 255))
+    # Full-screen footage with a small brand tag and bold, high-contrast captions.
+    small = ImageFont.truetype(BOLD, 25)
+    draw.rounded_rectangle((58, 100, 420, 164), radius=28, fill=(5, 12, 28, 205), outline=(80, 220, 255, 230), width=2)
+    draw.text((82, 118), f"FACTINATED  /  0{index+1}", font=small, fill=(130, 232, 255, 255))
+    head_font = ImageFont.truetype(BOLD, 68)
+    y = 1120
+    for line in wrap(draw, heading, head_font, 950):
+        draw.text((W//2, y), line, font=head_font, anchor="mm", align="center",
+                  fill=(255, 255, 255, 255), stroke_width=5, stroke_fill=(0, 0, 0, 230))
+        y += 82
+    body_font = ImageFont.truetype(BOLD, 40)
+    y += 32
+    for line in wrap(draw, detail, body_font, 900):
+        draw.text((W//2, y), line, font=body_font, anchor="mm", align="center",
+                  fill=(255, 235, 115, 255), stroke_width=4, stroke_fill=(0, 0, 0, 230))
         y += 54
-    credit_font = ImageFont.truetype(REGULAR, 20)
-    draw.text((72, 1830), f"Footage: Pixabay • {credit}", font=credit_font, fill=(230, 238, 250, 230))
+    credit_font = ImageFont.truetype(REGULAR, 18)
+    draw.text((58, 1870), f"Footage: Pixabay • {credit}", font=credit_font,
+              fill=(255, 255, 255, 235), stroke_width=2, stroke_fill=(0, 0, 0, 220))
     path = OUT / f"overlay_{index+1}.png"
     image.save(path)
     return path
@@ -137,11 +149,13 @@ def main():
     total = sum(weights)
     durations = [duration * w / total for w in weights]
     segments = []
+    used_sources = set()
+    (OUT / "pixabay_sources.txt").write_text("", encoding="utf-8")
     for i, ((heading, detail, query), seg_duration) in enumerate(zip(FACTS, durations)):
-        clip, username, page_url = find_clip(query, i)
+        clip, username, page_url = find_clip(query, i, used_sources)
         overlay = make_overlay(i, heading, detail, username)
         segment = OUT / f"pixabay_segment_{i+1}.mp4"
-        # Loop the free clip if necessary, crop to vertical, and add a readable information panel.
+        # Loop a unique free clip if necessary, crop to vertical, and add bold captions.
         video_filter = (
             "scale=1080:1920:force_original_aspect_ratio=increase,"
             "crop=1080:1920,setsar=1,fps=24"
