@@ -1,0 +1,33 @@
+name: Factinated AI planning test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Create AI-researched Short plan
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-4.1-mini
+        run: python3 scripts/plan_short.py
+
+      - name: Save plan for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factinated-ai-plan
+          path: |
+            output/factinated_ai_plan.md
+            output/factinated_ai_plan.json
+            output/factinated_ai_plan_raw.txt
+          if-no-files-found: ignore
+          retention-days: 7
