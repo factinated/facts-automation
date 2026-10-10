@@ -1,0 +1,29 @@
+name: Test Higgsfield video
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-test-clip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate one Higgsfield test clip
+        env:
+          HF_API_KEY: \${{ secrets.HF_API_KEY }}
+        run: python3 scripts/test_higgsfield.py
+
+      - name: Save clip for review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factinated-higgsfield-test
+          path: output/factinated_higgsfield_test.mp4
+          if-no-files-found: error
+          retention-days: 3
