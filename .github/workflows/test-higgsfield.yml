@@ -16,7 +16,7 @@ jobs:
 
       - name: Generate one Higgsfield test clip
         env:
-          HF_API_KEY: \${{ secrets.HF_API_KEY }}
+          HF_API_KEY: ${{ secrets.HF_API_KEY }}
         run: python3 scripts/test_higgsfield.py
 
       - name: Save clip for review
