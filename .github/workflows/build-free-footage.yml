@@ -22,6 +22,14 @@ jobs:
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install edge-tts pillow
 
+      - name: Cache Pixabay search results (24-hour minimum)
+        uses: actions/cache@v4
+        with:
+          path: .pixabay_api_cache
+          key: pixabay-api-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            pixabay-api-${{ runner.os }}-
+
       - name: Build free-footage Short
         env:
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
